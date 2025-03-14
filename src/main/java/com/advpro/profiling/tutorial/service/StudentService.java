@@ -7,12 +7,14 @@ import com.advpro.profiling.tutorial.repository.StudentRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
+import java.util.stream.Collectors;
 
 /**
- * @author muhammad.khadafi
+ * Optimized StudentService for better performance in Apache JMeter tests.
+ * - Reduces database calls
+ * - Uses Streams for efficient operations
+ * - Improves string concatenation performance
  */
 @Service
 public class StudentService {
@@ -25,39 +27,33 @@ public class StudentService {
 
     public List<StudentCourse> getAllStudentsWithCourses() {
         List<Student> students = studentRepository.findAll();
-        List<StudentCourse> studentCourses = new ArrayList<>();
-        for (Student student : students) {
-            List<StudentCourse> studentCoursesByStudent = studentCourseRepository.findByStudentId(student.getId());
-            for (StudentCourse studentCourseByStudent : studentCoursesByStudent) {
-                StudentCourse studentCourse = new StudentCourse();
-                studentCourse.setStudent(student);
-                studentCourse.setCourse(studentCourseByStudent.getCourse());
-                studentCourses.add(studentCourse);
-            }
+        if (students.isEmpty()) {
+            return Collections.emptyList();
         }
-        return studentCourses;
+
+        // Get all courses in one go instead of calling findByStudentId multiple times
+        List<StudentCourse> studentCourses = studentCourseRepository.findAll();
+        Map<Long, Student> studentMap = students.stream()
+                .collect(Collectors.toMap(Student::getId, student -> student));
+
+        return studentCourses.stream()
+                .map(sc -> {
+                    StudentCourse newSc = new StudentCourse();
+                    newSc.setStudent(studentMap.get(sc.getStudent().getId()));
+                    newSc.setCourse(sc.getCourse());
+                    return newSc;
+                })
+                .collect(Collectors.toList());
     }
 
     public Optional<Student> findStudentWithHighestGpa() {
-        List<Student> students = studentRepository.findAll();
-        Student highestGpaStudent = null;
-        double highestGpa = 0.0;
-        for (Student student : students) {
-            if (student.getGpa() > highestGpa) {
-                highestGpa = student.getGpa();
-                highestGpaStudent = student;
-            }
-        }
-        return Optional.ofNullable(highestGpaStudent);
+        return studentRepository.findAll().stream()
+                .max(Comparator.comparingDouble(Student::getGpa));
     }
 
     public String joinStudentNames() {
-        List<Student> students = studentRepository.findAll();
-        String result = "";
-        for (Student student : students) {
-            result += student.getName() + ", ";
-        }
-        return result.substring(0, result.length() - 2);
+        return studentRepository.findAll().stream()
+                .map(Student::getName)
+                .collect(Collectors.joining(", "));
     }
 }
-
